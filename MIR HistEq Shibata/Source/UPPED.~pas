@@ -1,0 +1,198 @@
+unit UPPED;
+
+interface
+
+uses
+  Math;
+
+type
+  mat68 = array[0..67,0..67]of integer;
+  mat64 = array[0..63,0..63]of integer;
+  arr40 = array[0..39]of integer;
+  arr64 = array[0..63]of integer;
+  arr127 = array[0..126]of integer;
+
+procedure GeneratePPEDVector(sumber: mat68; var vector: arr64);
+function Euclidean(query,landmark: arr64): Double;
+
+implementation
+
+procedure GeneratePPEDVector(sumber: mat68; var vector: arr64);    // Generate vektor PPED
+var i,j,k,m,n: integer;
+    r,s: real;
+    t: Byte;
+    matDiffH,matDiffV: mat68;
+    arrThres: arr40;
+    matThres,matMapH,matMapV,matMapP45,matMapM45: mat64;
+    pH,pV,pP45i,pM45i, V0,V: arr64;
+    pP45,pM45: arr127;
+begin
+// Hitung Selisih-absolut dr tiap pixel yg bersebelahan secara horizontal n vertikal
+  for i:= 0 to 67 do
+    for j:= 0 to 67 do
+    begin
+      matDiffH[i,j]:= 0;
+      matDiffV[i,j]:= 0;
+      if(i<67)then
+        matDiffH[i,j]:= Abs(sumber[i,j] - sumber[i+1,j]);
+      if(j<67)then
+        matDiffV[i,j]:= Abs(sumber[i,j] - sumber[i,j+1]);
+    end;
+
+// Hitung nilai threshold/median pada setiap pixel
+  for i:= 0 to 63 do
+    for j:= 0 to 63 do
+    begin
+      for k:= 0 to 19 do
+        arrThres[k]:= matDiffH[i+(k mod 4),j+(k div 4)];  // ambil 20 nilai selisih horizontal utk setiap blok 5x5
+      for k:= 0 to 19 do
+        arrThres[k+20]:= matDiffV[i+(k mod 5),j+(k div 5)];  // ambil 20 nilai selisih vertikal utk setiap blok 5x5
+      // Pengurutan Data
+      m:= 1;
+      n:= 2;
+      while m < 40 do
+      begin
+        if(arrThres[m-1] <= arrThres[m])then
+        begin
+          m:= n;
+          n:= n + 1;
+        end
+        else begin
+          t:= arrThres[m-1];
+          arrThres[m-1]:= arrThres[m];
+          arrThres[m]:= t;
+          m:= m - 1;
+          if(m = 0)then
+          begin
+            m:= n;
+            n:= n + 1;
+          end;
+        end;
+      end;
+      // Ambil nilai median
+      matThres[i,j]:= Ceil(((arrThres[19]+arrThres[20])/2)*10);
+    end;
+
+// Hitung Feature Map pada 4 arah
+  for i:= 0 to 63 do
+    for j:= 0 to 63 do
+    begin
+      matMapH[i,j]:= abs(sumber[i,j] + sumber[i+1,j] + sumber[i+2,j] + sumber[i+3,j] + sumber[i+4,j]
+                   + sumber[i,j+1] + sumber[i+1,j+1] + sumber[i+2,j+1] + sumber[i+3,j+1] + sumber[i+4,j+1]
+                   - sumber[i,j+3] - sumber[i+1,j+3] - sumber[i+2,j+3] - sumber[i+3,j+3] - sumber[i+4,j+3]
+                   - sumber[i,j+4] - sumber[i+1,j+4] - sumber[i+2,j+4] - sumber[i+3,j+4] - sumber[i+4,j+4]
+                   );
+      if(matMapH[i,j] > matThres[i,j])then
+        matMapH[i,j]:= 1
+      else
+        matMapH[i,j]:= 0;
+
+      matMapP45[i,j]:= abs(sumber[i,j] + sumber[i+1,j] + sumber[i+2,j] + sumber[i+3,j]
+                   + sumber[i,j+1] + sumber[i+1,j+1] + sumber[i+2,j+1]
+                   + sumber[i,j+2] + sumber[i+1,j+2]
+                   + sumber[i,j+3]
+                   - sumber[i+4,j+1]
+                   - sumber[i+3,j+2] - sumber[i+4,j+2]
+                   - sumber[i+2,j+3] - sumber[i+3,j+3] - sumber[i+4,j+3]
+                   - sumber[i+1,j+4] - sumber[i+2,j+4] - sumber[i+3,j+4] - sumber[i+4,j+4]
+                   );
+      if(matMapP45[i,j] > matThres[i,j])then
+        matMapP45[i,j]:= 1
+      else
+        matMapP45[i,j]:= 0;
+
+      matMapV[i,j]:= abs(sumber[i+4,j] + sumber[i+4,j+1] + sumber[i+4,j+2] + sumber[i+4,j+3] + sumber[i+4,j+4]
+                   + sumber[i+3,j] + sumber[i+3,j+1] + sumber[i+3,j+2] + sumber[i+3,j+3] + sumber[i+3,j+4]
+                   - sumber[i+1,j] - sumber[i+1,j+1] - sumber[i+1,j+2] - sumber[i+1,j+3] - sumber[i+1,j+4]
+                   - sumber[i,j] - sumber[i,j+1] - sumber[i,j+2] - sumber[i,j+3] - sumber[i,j+4]
+                   );
+      if(matMapV[i,j] > matThres[i,j])then
+        matMapV[i,j]:= 1
+      else
+        matMapV[i,j]:= 0;
+
+      matMapM45[i,j]:= abs(sumber[i+1,j] + sumber[i+2,j] + sumber[i+3,j] + sumber[i+4,j]
+                   + sumber[i+2,j+1] + sumber[i+3,j+1] + sumber[i+4,j+1]
+                   + sumber[i+3,j+2] + sumber[i+4,j+2]
+                   + sumber[i+4,j+3]
+                   - sumber[i,j+1]
+                   - sumber[i,j+2] - sumber[i+1,j+2]
+                   - sumber[i,j+3] - sumber[i+1,j+3] - sumber[i+2,j+3]
+                   - sumber[i,j+4] - sumber[i+1,j+4] - sumber[i+2,j+4] - sumber[i+3,j+4]
+                   );
+      if(matMapM45[i,j] > matThres[i,j])then
+        matMapM45[i,j]:= 1
+      else
+        matMapM45[i,j]:= 0;
+    end;
+
+// Hitung Proyeksi Terhadap Feature Map
+  for i:= 0 to 63 do
+  begin
+    pH[i]:= 0;
+    pV[i]:= 0;
+    pP45i[i]:= 0;
+    pM45i[i]:= 0;
+  end;
+  for i:= 0 to 126 do
+  begin
+    pP45[i]:= 0;
+    pM45[i]:= 0;
+  end;
+  for i:= 0 to 63 do
+    for j:= 0 to 63 do
+    begin
+      pH[j]:= pH[j] + matMapH[i,j];
+      pV[i]:= pV[i] + matMapV[i,j];
+      pP45[i+j]:= pP45[i+j] + matMapP45[i,j];
+      pM45[63-i+j]:= pM45[63-i+j] + matMapM45[i,j];
+    end;
+  // 127-64 reduction utk proyeksi arah +45 dan -45
+  for i:= 0 to 63 do
+  begin
+    r:= pP45[2*i];
+    s:= pM45[2*i];
+    if(i > 0)then
+    begin
+      r:= r + (pP45[2*i-1] / 2);
+      s:= s + (pM45[2*i-1] / 2);
+    end;
+    if(i < 63)then
+    begin
+      r:= r + (pP45[2*i+1] / 2);
+      s:= s + (pM45[2*i+1] / 2);
+    end;
+    pP45i[i]:= Round(r);
+    pM45i[i]:= Round(s);
+  end;
+  // Hitung vector 64 dimensi
+  for i:= 0 to 15 do
+  begin
+    V0[i]   := pH[4*i+0]    + pH[4*i+1]    + pH[4*i+2]    + pH[4*i+3];
+    V0[i+16]:= pP45i[4*i+0] + pP45i[4*i+1] + pP45i[4*i+2] + pP45i[4*i+3];
+    V0[i+32]:= pV[4*i+0]    + pV[4*i+1]    + pV[4*i+2]    + pV[4*i+3];
+    V0[i+48]:= pM45i[4*i+0] + pM45i[4*i+1] + pM45i[4*i+2] + pM45i[4*i+3];
+  end;
+  // Vector element smoothing
+  for i:= 0 to 63 do
+  begin
+    r:= V0[i]/2;
+    if(i > 0)then
+      r:= r + (V0[i-1] / 4);
+    if(i < 63)then
+      r:= r + (V0[i+1] / 4);
+    vector[i]:= Round(r);
+  end;
+end;
+
+//hitung jarak Euclidean 
+function Euclidean(query,landmark: arr64): Double;
+var i,n: Integer;
+begin
+  n:= 0;
+  for i:= 0 to 63 do
+    n:= n + Sqr(query[i] - landmark[i]);
+  Result:= Sqrt(n);
+end;
+
+end.
